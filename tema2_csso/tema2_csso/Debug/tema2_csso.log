@@ -1,0 +1,4 @@
+﻿  tema2_csso.cpp
+C:\Users\bujor\source\repos\tema2_csso\tema2_csso\tema2_csso.cpp(10,12): warning C4101: 'hProcess': unreferenced local variable
+C:\Users\bujor\source\repos\tema2_csso\tema2_csso\tema2_csso.cpp(12,11): warning C4101: 'dwPriorityClass': unreferenced local variable
+  tema2_csso.vcxproj -> C:\Users\bujor\source\repos\tema2_csso\Debug\tema2_csso.exe
