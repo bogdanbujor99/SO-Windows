@@ -1,0 +1,3 @@
+﻿  process2.cpp
+C:\Users\bujor\source\repos\process2\process2\process2.cpp(77,8): warning C4267: 'argument': conversion from 'size_t' to 'DWORD', possible loss of data
+  process2.vcxproj -> C:\Users\bujor\source\repos\process2\x64\Debug\process2.exe
