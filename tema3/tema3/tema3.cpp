@@ -6,8 +6,8 @@
 #include <iostream>
 #include <algorithm>
 
-#define WORKER_THREADS_COUNT 4
-#define ITERATIONS 4
+#define WORKER_THREADS_COUNT 5
+#define ITERATIONS 60
 #define BUF_SIZE 256
 #define MAX_SIZE 256
 
@@ -22,6 +22,7 @@ int time_out = 0;
 DWORD   dwThreadIdArray[WORKER_THREADS_COUNT];
 HANDLE  hThreadArray[WORKER_THREADS_COUNT];
 HANDLE anonMutex[WORKER_THREADS_COUNT];
+HANDLE rowToMutexFile; 
 HANDLE hEvent;
 HANDLE hMapFileOut;
 LPCTSTR pBufOut;
@@ -32,8 +33,15 @@ HANDLE hfile;
 HANDLE hfileOut;
 CRITICAL_SECTION crit;
 string str;
+double seconds;
+int next_thread;
 
-string paths[100] = { "C:\\Users\\bujor\\source\\repos\\input_drum_1.txt","C:\\Users\\bujor\\source\\repos\\input_drum_2.txt","C:\\Users\\bujor\\source\\repos\\input_drum_3.txt","C:\\Users\\bujor\\source\\repos\\input_drum_4.txt","C:\\Users\\bujor\\source\\repos\\input_drum_5.txt" };
+string paths[100] = { "C:\\Users\\bujor\\source\\repos\\input_drum_1.txt",
+                      "C:\\Users\\bujor\\source\\repos\\input_drum_2.txt",
+                      "C:\\Users\\bujor\\source\\repos\\input_drum_3.txt",
+                      "C:\\Users\\bujor\\source\\repos\\input_drum_4.txt",
+                      "C:\\Users\\bujor\\source\\repos\\input_drum_5.txt" 
+                    };
 
 int moments_rcm[100][2];
 
@@ -94,6 +102,7 @@ int main() {
         return 0;
     }
     int unities_ccm = 0;
+    rowToMutexFile = CreateMutex(NULL, FALSE, NULL);
 
     InitializeCriticalSection(&crit);
 
@@ -117,7 +126,6 @@ int main() {
             }
         }
 
-        ResetEvent(hEvent); //sleep thread
         Sleep(10);
 
         if (WAIT_TIMEOUT == WaitForMultipleObjects(WORKER_THREADS_COUNT, anonMutex, TRUE, 1000))
@@ -143,9 +151,6 @@ int main() {
         CopyMemory(moments_rcm, (PVOID)pBufIn, sizeof(int)* WORKER_THREADS_COUNT*2);
 
         for (int i = 0; i < WORKER_THREADS_COUNT; i++)
-            cout << moments_rcm[i][0] << " " << moments_rcm[i][1] << endl;
-        
-        for (int i = 0; i < WORKER_THREADS_COUNT; i++)
         {
             for (int j = i + 1; j < WORKER_THREADS_COUNT; j++)
                 if (moments_rcm[i][1] >= moments_rcm[j][1])
@@ -162,7 +167,8 @@ int main() {
             nr_vehicles++;
 
         double times[100][2];
-        double seconds = 60.0 / nr_vehicles;
+        if(nr_vehicles!=0)
+            seconds = 60.0 / nr_vehicles;
         double time;
         
         if (train)
@@ -173,27 +179,27 @@ int main() {
         for(int i = WORKER_THREADS_COUNT - 1 ; i >=0 ; i--)
             if (moments_rcm[i][1] != 0)
             {
-                times[i][0] = moments_rcm[i][0];
-                times[i][1] = time;
+                times[WORKER_THREADS_COUNT-i-1][0] = moments_rcm[i][0];
+                times[WORKER_THREADS_COUNT-i-1][1] = time;
                 time += seconds;
             }
             else
             {
-                times[i][0] = moments_rcm[i][0];
-                times[i][1] = -1;
+                times[WORKER_THREADS_COUNT-i-1][0] = moments_rcm[i][0];
+                times[WORKER_THREADS_COUNT-i-1][1] = -1;
             }
+        next_thread = times[0][0];
+        Sleep(10);
 
-        for (int i = 0; i < WORKER_THREADS_COUNT; i++)
-        {
-            cout << times[i][0] << " " << times[i][1] << endl;
-        }
 
+        if (nr_vehicles == 0)
+            next_thread = -1;
         CopyMemory((PVOID)pBufOut,times,sizeof(times));
 
         for (auto mutex : anonMutex)
             ReleaseMutex(mutex);
 
-        SetEvent(hEvent);  //start thread
+        SetEvent(hEvent);
         ResetEvent(hEvent); 
         Sleep(10);
 
@@ -207,6 +213,7 @@ int main() {
         for (auto mutex : anonMutex)
             ReleaseMutex(mutex);
         SetEvent(hEvent);
+        ResetEvent(hEvent);
         unities_ccm++;
     }
 
@@ -261,7 +268,7 @@ DWORD WINAPI RCM(LPVOID nrThread) {
     s[299] = '\0';
     for (int k = 0; k < ITERATIONS; k++)
     {
-            WaitForSingleObject(anonMutex[nr_Thread], INFINITE); //blocare mutexuri
+            WaitForSingleObject(anonMutex[nr_Thread], INFINITE); 
             EnterCriticalSection(&crit);
             int car_rcm[2];
             car_rcm[0] = nr_Thread;
@@ -274,24 +281,42 @@ DWORD WINAPI RCM(LPVOID nrThread) {
             auxpBufIn += 8;
             LeaveCriticalSection(&crit);
             ReleaseMutex(anonMutex[nr_Thread]);
+            Sleep(10);
             WaitForSingleObject(hEvent, INFINITE);
 
 
             WaitForSingleObject(anonMutex[nr_Thread], INFINITE);
             double times[100][2], seconds;
             CopyMemory(times, (PVOID)pBufOut, sizeof(double) * WORKER_THREADS_COUNT * 2);
-            EnterCriticalSection(&crit);
-            for (int i = 0; i < WORKER_THREADS_COUNT; i++)
-                if (nr_Thread == times[i][0] && times[i][1] != -1)
+            while (true)
+            {
+                WaitForSingleObject(rowToMutexFile, INFINITE);
+                if (nr_Thread == next_thread || next_thread==-1)
+                    break;
+                else
+                    ReleaseMutex(rowToMutexFile);
+            }
+            if(next_thread!=-1)
+                for (int i = 0; i <= WORKER_THREADS_COUNT - 1; i++)
                 {
-                    seconds = times[i][1];
-                    str = "La momentul " + to_string(k) + ", la secunda " + to_string(seconds) + " trece prin intersectie autovehiculul de pe drumul " + to_string(nr_Thread) + "\n";
-                    if (!WriteFile(hfileOut, str.c_str(), strlen(str.c_str()), &byte, NULL))
+                    if (nr_Thread == times[i][0] && times[i][1] != -1)
                     {
-                        printf("Error: %d", GetLastError());
+                        seconds = times[i][1];
+                        str = "La momentul " + to_string(k) + ", la secunda " + to_string(seconds) + " trece prin intersectie autovehiculul de pe drumul " + to_string(nr_Thread) + "\n";
+                        if (!WriteFile(hfileOut, str.c_str(), strlen(str.c_str()), &byte, NULL))
+                        {
+                            printf("Error: %d", GetLastError());
+                        }
+                    }
+                    if (times[i][0] == nr_Thread)
+                    {
+                        if (i != WORKER_THREADS_COUNT - 1)
+                            next_thread = times[i + 1][0];
+                        else
+                            next_thread = -1;
                     }
                 }
-            LeaveCriticalSection(&crit);
+            ReleaseMutex(rowToMutexFile);
             ReleaseMutex(anonMutex[nr_Thread]);
             WaitForSingleObject(hEvent, INFINITE);
     }

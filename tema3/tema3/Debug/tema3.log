@@ -1,2 +1,4 @@
 ﻿  tema3.cpp
+C:\Users\bujor\source\repos\tema3\tema3\tema3.cpp(191,33): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\bujor\source\repos\tema3\tema3\tema3.cpp(314,57): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
   tema3.vcxproj -> C:\Users\bujor\source\repos\tema3\Debug\tema3.exe
