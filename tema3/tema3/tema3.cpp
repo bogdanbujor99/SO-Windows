@@ -7,9 +7,11 @@
 #include <algorithm>
 
 #define WORKER_THREADS_COUNT 5
-#define ITERATIONS 60
+#define ITERATIONS 100
 #define BUF_SIZE 256
 #define MAX_SIZE 256
+
+#pragma warning (disable : 4996)
 
 using namespace std;
 
@@ -17,10 +19,8 @@ DWORD WINAPI RCM(LPVOID nrThread);
 
 void MyErrorHandler(LPTSTR lpszFunction);
 
-int time_out = 0;
-
-DWORD   dwThreadIdArray[WORKER_THREADS_COUNT];
-HANDLE  hThreadArray[WORKER_THREADS_COUNT];
+DWORD dwThreadIdArray[WORKER_THREADS_COUNT];
+HANDLE hThreadArray[WORKER_THREADS_COUNT];
 HANDLE anonMutex[WORKER_THREADS_COUNT];
 HANDLE rowToMutexFile; 
 HANDLE hEvent;
@@ -35,15 +35,17 @@ CRITICAL_SECTION crit;
 string str;
 double seconds;
 int next_thread;
-
-string paths[100] = { "C:\\Users\\bujor\\source\\repos\\input_drum_1.txt",
-                      "C:\\Users\\bujor\\source\\repos\\input_drum_2.txt",
-                      "C:\\Users\\bujor\\source\\repos\\input_drum_3.txt",
-                      "C:\\Users\\bujor\\source\\repos\\input_drum_4.txt",
-                      "C:\\Users\\bujor\\source\\repos\\input_drum_5.txt" 
-                    };
-
 int moments_rcm[100][2];
+char paths[100][100];
+int time_out = 0;
+
+void path(int nr_thread)
+{
+    char p[256] = "C:\\Users\\bujor\\source\\repos\\input_drum_";
+    strcat(p, (to_string(nr_thread+1)).c_str());
+    strcat(p, ".txt");
+    strcat(paths[nr_thread], p);
+}
 
 int main() {
     if (!(hfile = CreateFile("C:\\Users\\bujor\\source\\repos\\input_intersectie.txt", GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL)))
@@ -127,8 +129,7 @@ int main() {
         }
 
         Sleep(10);
-
-        if (WAIT_TIMEOUT == WaitForMultipleObjects(WORKER_THREADS_COUNT, anonMutex, TRUE, 1000))
+        if (WAIT_TIMEOUT == WaitForMultipleObjects(WORKER_THREADS_COUNT, anonMutex, TRUE, 10000))
         {
             MyErrorHandler(LPSTR("WaitForMultipleObjects"));
             time_out++;
@@ -188,22 +189,17 @@ int main() {
                 times[WORKER_THREADS_COUNT-i-1][0] = moments_rcm[i][0];
                 times[WORKER_THREADS_COUNT-i-1][1] = -1;
             }
-        next_thread = times[0][0];
-        Sleep(10);
-
+        next_thread = (int)times[0][0];
 
         if (nr_vehicles == 0)
             next_thread = -1;
         CopyMemory((PVOID)pBufOut,times,sizeof(times));
 
+        SetEvent(hEvent); 
+        ResetEvent(hEvent); 
         for (auto mutex : anonMutex)
             ReleaseMutex(mutex);
-
-        SetEvent(hEvent);
-        ResetEvent(hEvent); 
-        Sleep(10);
-
-        if (WAIT_TIMEOUT == WaitForMultipleObjects(WORKER_THREADS_COUNT, anonMutex, TRUE, 1000))
+        if (WAIT_TIMEOUT == WaitForMultipleObjects(WORKER_THREADS_COUNT, anonMutex, TRUE, 10000))
         {
             MyErrorHandler(LPSTR("WaitForMultipleObjects"));
             time_out++;
@@ -212,8 +208,6 @@ int main() {
         }
         for (auto mutex : anonMutex)
             ReleaseMutex(mutex);
-        SetEvent(hEvent);
-        ResetEvent(hEvent);
         unities_ccm++;
     }
 
@@ -253,7 +247,8 @@ DWORD WINAPI RCM(LPVOID nrThread) {
         return 1;
     
     HANDLE hfile;
-    if (!(hfile = CreateFile((paths[nr_Thread]).c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL)))
+    path(nr_Thread);
+    if (!(hfile = CreateFile(paths[nr_Thread], GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL)))
     {
         printf("Error: %d", GetLastError());
         return 0;
@@ -268,7 +263,7 @@ DWORD WINAPI RCM(LPVOID nrThread) {
     s[299] = '\0';
     for (int k = 0; k < ITERATIONS; k++)
     {
-            WaitForSingleObject(anonMutex[nr_Thread], INFINITE); 
+            WaitForSingleObject(anonMutex[nr_Thread], INFINITE);
             EnterCriticalSection(&crit);
             int car_rcm[2];
             car_rcm[0] = nr_Thread;
@@ -281,11 +276,8 @@ DWORD WINAPI RCM(LPVOID nrThread) {
             auxpBufIn += 8;
             LeaveCriticalSection(&crit);
             ReleaseMutex(anonMutex[nr_Thread]);
-            Sleep(10);
+
             WaitForSingleObject(hEvent, INFINITE);
-
-
-            WaitForSingleObject(anonMutex[nr_Thread], INFINITE);
             double times[100][2], seconds;
             CopyMemory(times, (PVOID)pBufOut, sizeof(double) * WORKER_THREADS_COUNT * 2);
             while (true)
@@ -311,14 +303,13 @@ DWORD WINAPI RCM(LPVOID nrThread) {
                     if (times[i][0] == nr_Thread)
                     {
                         if (i != WORKER_THREADS_COUNT - 1)
-                            next_thread = times[i + 1][0];
+                            next_thread = (int)times[i + 1][0];
                         else
                             next_thread = -1;
                     }
                 }
             ReleaseMutex(rowToMutexFile);
             ReleaseMutex(anonMutex[nr_Thread]);
-            WaitForSingleObject(hEvent, INFINITE);
     }
     return 0;
 }
